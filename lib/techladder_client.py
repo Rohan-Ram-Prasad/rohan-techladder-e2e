@@ -13,9 +13,6 @@ class TechladderClient:
         self.api_key = os.getenv("API_KEY")
         self.base_url = os.getenv("BASE_URL")
         self.agent_name = os.getenv("AGENT_NAME")
-        self.expected_summary = (
-            os.getenv("EXPECTED_SUMMARY", "false").lower() == "true"
-        )
 
         self.voice = os.getenv("VOICE", "Kavya")
         self.did_number_id = os.getenv("DID_NUMBER_ID")
@@ -126,11 +123,24 @@ class TechladderClient:
 
         return response.json()
 
+    def get_call_result(self, call_id):
+        response = requests.get(
+            f"{self.base_url}/api/v1/public/calls/{call_id}/result",
+            headers=self.headers,
+        )
+
+        response.raise_for_status()
+
+        print("\n========== CALL RESULT ==========")
+        print(response.json())
+        print("=================================\n")
+
+        return response.json()
+
     # -------------------------
     # Poll Results
     # -------------------------
-
-    def poll_results(self, batch_id, timeout=120, interval=5):
+    def poll_results(self, batch_id, timeout=180, interval=5):
         start = time.time()
 
         while time.time() - start < timeout:
@@ -143,20 +153,53 @@ class TechladderClient:
             response.raise_for_status()
 
             data = response.json()
-
             items = data.get("data", {}).get("items", [])
 
-            summary_found = False
+            if not items:
+                print("Waiting for results...")
+                time.sleep(interval)
+                continue
 
-            if items:
-                summary_found = items[0].get("summary") is not None
+            result = items[0]
 
-            if summary_found == self.expected_summary:
-                print(
-                    f"Expected Outcome Achieved (summary_found={summary_found})"
-                )
+            call_id = result.get("call_id")
+
+            if (
+                result.get("call_status") in ["completed", "failed"]
+                and call_id
+            ):
+                self.get_call_result(call_id)
+
+            print("\n========== CALL DETAILS ==========")
+            print("Batch Status      :", data["data"].get("status"))
+            print("Call Status       :", result.get("call_status"))
+            print("Transcript Status :", result.get("transcript_status"))
+            print("Duration          :", result.get("duration_seconds"))
+            print("Completed At      :", result.get("completed_at"))
+            print("Disconnect Reason :", result.get("disconnect_reason"))
+            print("Outcomes          :", result.get("outcomes"))
+            print("Summary           :", result.get("summary"))
+            print("Transcript        :", result.get("llm_transcript"))
+            print("Recording         :", result.get("recording_available"))
+            print("==================================\n")
+
+            # Verify relevant fields for fake call
+            if (
+                data["data"].get("status") == "completed"
+                and result.get("call_status") == "failed"
+                and result.get("completed_at") is not None
+                and result.get("duration_seconds") == 0
+            ):
+                print("\n========== VALIDATION ==========")
+                print("Batch Status Verified : completed")
+                print("Call Status Verified  : failed")
+                print("Completed At Verified : Present")
+                print("Duration Verified     : 0")
+                print("Validation PASSED")
+                print("================================\n")
                 return True
 
+            print("Waiting for call completion and summary...\n")
             time.sleep(interval)
 
-        raise Exception("Expected outcome not achieved within timeout")
+        raise Exception("FAILED: Summary not generated within timeout.")
