@@ -183,7 +183,7 @@ class TechladderClient:
             print("Recording         :", result.get("recording_available"))
             print("==================================\n")
 
-            # Verify relevant fields for fake call
+            # Verify fake number call result
             if (
                 data["data"].get("status") == "completed"
                 and result.get("call_status") == "failed"
@@ -202,4 +202,6 @@ class TechladderClient:
             print("Waiting for call completion and summary...\n")
             time.sleep(interval)
 
-        raise Exception("FAILED: Summary not generated within timeout.")
+        raise Exception(
+            "FAILED: Call validation timeout."
+        )
